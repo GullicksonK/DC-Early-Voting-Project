@@ -43,7 +43,8 @@ election <- vote %>%
   select(election) %>%
   distinct() %>%
   extract(election, into=c("date_str", "type_cd"),
-          regex="([[:alnum:]]+)-([[:alnum:]])") %>%
+          regex="([[:alnum:]]+)-([[:alnum:]])",
+          remove=FALSE) %>%
   left_join(election_types) %>%
   select(-type_cd) %>%
   mutate(election_day=mdy(date_str),
