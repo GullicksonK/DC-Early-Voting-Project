@@ -47,5 +47,32 @@ ggplot(dist_v_early,
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
 
+# plot # of voters & number of early voters, by ward
+
+addr_dist <- select(address, FULLADDRESS, WARD, EVC_DIST) %>%
+  group_by(FULLADDRESS, WARD) %>% 
+  summarise(MIN_EVC_DIST=min(EVC_DIST))
+
+voter_addr <- vote %>%
+  group_by(voter_id) %>%
+  summarize(ever_early=any(action=="Early", na.rm=TRUE)) %>%
+  ungroup() %>%
+  inner_join(select(voter, voter_id, FULLADDRESS)) %>%
+  inner_join(addr_dist)
+
+voter_addr %<>%
+  mutate(evc_dist_bin = Hmisc::cut2(MIN_EVC_DIST, c(0, .25, .5, .75, 1, 1.5, 2, 3)))
+
+ward_early <- voter_addr %>%
+  group_by(WARD) %>%
+  summarize("Ever Voted Early"=sum(ever_early, na.rm=TRUE), 
+            "Total"=n(), 
+            "Live Within Half Mile"=sum(MIN_EVC_DIST<=.5,na.rm=TRUE))
+
+ward_early_long <- gather(ward_early, type, voters, -WARD)
+ggplot(ward_early_long, aes(WARD, voters, shape=type, color=type)) +
+  geom_point(size=3) + 
+  scale_y_continuous("Voters", limits=c(0,max(ward_early_long$voters)*1.1)) +
+  scale_x_continuous("Ward", breaks=1:8)
 
 
