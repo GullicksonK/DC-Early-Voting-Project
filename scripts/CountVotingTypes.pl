@@ -6,7 +6,7 @@
 use warnings;
 use Getopt::Long;
 use Cwd;
-use Spreadsheet::WriteExcel;
+#use Spreadsheet::WriteExcel;
 
 $whoami = ($0 =~ m,([^/]*)$,) ? $1 : $0;
 $dirname = ($0 =~ m,(.*)/[^/]+$,) ? $1 : ".";
@@ -23,7 +23,10 @@ my($verbose,$dry_run,$help);
 $verbose=0;
 $dry_run=0;
 $help=0;
-$cmdLineString="";
+$pollingPlaceFile="";
+$summaryFile="";
+$eventTarget="112012";
+$mapBoxFile="112012";
 @fileList = ();
 
 
@@ -31,8 +34,11 @@ Getopt::Long::Configure("bundling", "no_ignore_case_always");
 
 if (!Getopt::Long::GetOptions
                 ("v|verbose+"   => \$verbose,
-                 "h|help+" => \$help,
-                 "s|string=s" => \$cmdLineString,
+                 "h|help+" => \&do_usage,
+                 "p|polling=s" => \$pollingPlaceFile,
+                 "s|summary=s" => \$summaryFile,
+                 "e|event=s" => \$eventTarget,
+                 "m|mapBoxFile=s" => \$mapBoxFile,
                  "nop" => \$dry_run,
                  "<>" => \&addFileOption))
 {
@@ -49,6 +55,20 @@ if ($help)
 {
    &do_usage(0);
 }
+
+open(PPFD,"$pollingPlaceFile") || die "$whoami: unable to open $pollingPlaceFile: $!\n";
+@pollingPlaceFile = <PPFD>;
+close(PPFD);
+
+foreach $ppline (@pollingPlaceFile)
+{
+   @ppdata = split(/,/,$ppline);
+   $pollingPlace{$ppdata[3]} = "$ppdata[2],$ppdata[1]";
+   warn("$ppdata[3]: $pollingPlace{$ppdata[3]}\n");
+   #$pollingPlaceDescription{$ppdata[3]} = "$ppdata[5]:$ppdata[6]";
+}
+open(SFD,">$summaryFile") || die "$whoami: unable to open $summaryFile: $!\n";
+open(MBFD,">$mapBoxFile") || die "$whoami: unable to open $mapBoxFile: $!\n";
 
 
 foreach $f (@fileList)
@@ -81,7 +101,7 @@ foreach $f (@fileList)
          $precinctIdx = 9999999;
          foreach $h (@header)
          {
-            if ($header[$idx] eq "PRECINCT")
+            if ($h eq "PRECINCT")
             {
                $precinctIdx = $idx;
             }
@@ -130,19 +150,25 @@ foreach $f (@fileList)
    close(PVD);
 
    #$workbook = Spreadsheet::WriteExcel->new("$filePrefix.VotingByPrecinct.xls");
-   print("Precinct,Vote Type,");
+   print(SFD "Precinct,Vote Type,");
    foreach $event (sort(compareEvents keys(%eventIdx)))
    {
-      print("$event,");
-      print("$event %ofVotes,");
-      print("$event %ofVoters,");
+      print(SFD "$event,");
+      print(SFD "$event %ofVotes,");
+      print(SFD "$event %ofVoters,");
    }
-   print("\n");
+   print(MBFD "Latitude, Longitude, Layer, Magnitude, Description\n");
+   print(SFD "\n");
+   $layer = 1;
    foreach $precinct (sort({$a <=> $b} keys(%precinctStarted)))
    {
-      print("$precinct,Eligible,");
+      print(SFD "$precinct,Eligible,");
       foreach $event (sort(compareEvents keys(%eventIdx)))
       {
+         if ($event =~ m/$eventTarget/)
+         {
+         print(MBFD "$pollingPlace{$precinct}, ");
+         }
          $totalPrecinctVotes = ${'V'}{$precinct}{$event} + ${'Y'}{$precinct}{$event};
          $totalPrecinctVoters = ${'E'}{$precinct}{$event} + 
                                 ${'N'}{$precinct}{$event} +
@@ -150,7 +176,7 @@ foreach $f (@fileList)
                                 ${'Y'}{$precinct}{$event} +
                                 ${'A'}{$precinct}{$event} +
                                 ${'Blank'}{$precinct}{$event};
-         print("${'E'}{$precinct}{$event},");
+         print(SFD "${'E'}{$precinct}{$event},");
          if ($totalPrecinctVotes>0)
          {
             $percentOfVotes =  (${'E'}{$precinct}{$event}/$totalPrecinctVotes)*100;
@@ -167,13 +193,22 @@ foreach $f (@fileList)
          {
             $percentOfVoters = 0;
          }
-         printf("%2.0f,",$percentOfVotes);
-         printf("%2.0f,",$percentOfVoters);
+         if ($event =~ m/$eventTarget/)
+         {
+            print(MBFD "1,$percentOfVoters,Eligible Voters did not Vote $precinct $event\n");
+            $layer++;
+         }
+         printf(SFD "%2.0f,",$percentOfVotes);
+         printf(SFD "%2.0f,",$percentOfVoters);
       }
-      print("\n");
-      print("$precinct,Ineligible,");
+      print(SFD "\n");
+      print(SFD "$precinct,Ineligible,");
       foreach $event (sort(compareEvents keys(%eventIdx)))
       {
+         if ($event =~ m/$eventTarget/)
+         {
+         print(MBFD "$pollingPlace{$precinct}, ");
+         }
          $totalPrecinctVotes = ${'V'}{$precinct}{$event} + ${'Y'}{$precinct}{$event};
          $totalPrecinctVoters = ${'E'}{$precinct}{$event} + 
                                 ${'N'}{$precinct}{$event} +
@@ -181,7 +216,7 @@ foreach $f (@fileList)
                                 ${'Y'}{$precinct}{$event} +
                                 ${'A'}{$precinct}{$event} +
                                 ${'Blank'}{$precinct}{$event};
-         print("${'N'}{$precinct}{$event},");
+         print(SFD "${'N'}{$precinct}{$event},");
          if ($totalPrecinctVotes>0)
          {
             $percentOfVotes =  (${'N'}{$precinct}{$event}/$totalPrecinctVotes)*100;
@@ -198,13 +233,22 @@ foreach $f (@fileList)
          {
             $percentOfVoters = 0;
          }
-         printf("%2.0f,",$percentOfVotes);
-         printf("%2.0f,",$percentOfVoters);
+         if ($event =~ m/$eventTarget/)
+         {
+            print(MBFD "2,$percentOfVoters,Ineligible Voters $precinct $event\n");
+            $layer++;
+         }
+         print(SFD "%2.0f,",$percentOfVotes);
+         print(SFD "%2.0f,",$percentOfVoters);
       }
-      print("\n");
-      print("$precinct,InPersonVote,");
+      print(SFD "\n");
+      print(SFD "$precinct,InPersonVote,");
       foreach $event (sort(compareEvents keys(%eventIdx)))
       {
+         if ($event =~ m/$eventTarget/)
+         {
+         print(MBFD "$pollingPlace{$precinct}, ");
+         }
          $totalPrecinctVotes = ${'V'}{$precinct}{$event} + ${'Y'}{$precinct}{$event};
          $totalPrecinctVoters = ${'E'}{$precinct}{$event} + 
                                 ${'N'}{$precinct}{$event} +
@@ -212,7 +256,7 @@ foreach $f (@fileList)
                                 ${'Y'}{$precinct}{$event} +
                                 ${'A'}{$precinct}{$event} +
                                 ${'Blank'}{$precinct}{$event};
-         print("${'V'}{$precinct}{$event},");
+         print(SFD "${'V'}{$precinct}{$event},");
          if ($totalPrecinctVotes>0)
          {
             $percentOfVotes =  (${'V'}{$precinct}{$event}/$totalPrecinctVotes)*100;
@@ -229,13 +273,22 @@ foreach $f (@fileList)
          {
             $percentOfVoters = 0;
          }
-         printf("%2.0f,",$percentOfVotes);
-         printf("%2.0f,",$percentOfVoters);
+         if ($event =~ m/$eventTarget/)
+         {
+            print(MBFD "3,$percentOfVoters,InPerson Voters $precinct $event\n");
+            $layer++;
+         }
+         print(SFD "%2.0f,",$percentOfVotes);
+         print(SFD "%2.0f,",$percentOfVoters);
       }
-      print("\n");
-      print("$precinct,EarlyVoter,");
+      print(SFD "\n");
+      print(SFD "$precinct,EarlyVoter,");
       foreach $event (sort(compareEvents keys(%eventIdx)))
       {
+         if ($event =~ m/$eventTarget/)
+         {
+         print(MBFD "$pollingPlace{$precinct}, ");
+         }
          $totalPrecinctVotes = ${'V'}{$precinct}{$event} + ${'Y'}{$precinct}{$event};
          $totalPrecinctVoters = ${'E'}{$precinct}{$event} + 
                                 ${'N'}{$precinct}{$event} +
@@ -243,7 +296,7 @@ foreach $f (@fileList)
                                 ${'Y'}{$precinct}{$event} +
                                 ${'A'}{$precinct}{$event} +
                                 ${'Blank'}{$precinct}{$event};
-         print("${'Y'}{$precinct}{$event},");
+         print(SFD "${'Y'}{$precinct}{$event},");
          if ($totalPrecinctVotes>0)
          {
             $percentOfVotes =  (${'Y'}{$precinct}{$event}/$totalPrecinctVotes)*100;
@@ -260,13 +313,22 @@ foreach $f (@fileList)
          {
             $percentOfVoters = 0;
          }
-         printf("%2.0f,",$percentOfVotes);
-         printf("%2.0f,",$percentOfVoters);
+         if ($event =~ m/$eventTarget/)
+         {
+            print(MBFD "4,$percentOfVoters,Early Voters $precinct $event\n");
+            $layer++;
+         }
+         print(SFD "%2.0f,",$percentOfVotes);
+         print(SFD "%2.0f,",$percentOfVoters);
       }
-      print("\n");
-      print("$precinct,Absentee,");
+      print(SFD "\n");
+      print(SFD "$precinct,Absentee,");
       foreach $event (sort(compareEvents keys(%eventIdx)))
       {
+         if ($event =~ m/$eventTarget/)
+         {
+         print(MBFD "$pollingPlace{$precinct}, ");
+         }
          $totalPrecinctVotes = ${'V'}{$precinct}{$event} + ${'Y'}{$precinct}{$event};
          $totalPrecinctVoters = ${'E'}{$precinct}{$event} + 
                                 ${'N'}{$precinct}{$event} +
@@ -274,7 +336,7 @@ foreach $f (@fileList)
                                 ${'Y'}{$precinct}{$event} +
                                 ${'A'}{$precinct}{$event} +
                                 ${'Blank'}{$precinct}{$event};
-         print("${'A'}{$precinct}{$event},");
+         print(SFD "${'A'}{$precinct}{$event},");
          if ($totalPrecinctVotes>0)
          {
             $percentOfVotes =  (${'A'}{$precinct}{$event}/$totalPrecinctVotes)*100;
@@ -291,11 +353,16 @@ foreach $f (@fileList)
          {
             $percentOfVoters = 0;
          }
-         printf("%2.0f,",$percentOfVotes);
-         printf("%2.0f,",$percentOfVoters);
+         if ($event =~ m/$eventTarget/)
+         {
+            print(MBFD "5,$percentOfVoters,Absentee Voters $precinct $event\n");
+            $layer++;
+         }
+         print(SFD "%2.0f,",$percentOfVotes);
+         print(SFD "%2.0f,",$percentOfVoters);
       }
-      print("\n");
-      print("$precinct,NotRegistered,");
+      print(SFD "\n");
+      print(SFD "$precinct,NotRegistered,");
       foreach $event (sort(compareEvents keys(%eventIdx)))
       {
          $totalPrecinctVotes = ${'V'}{$precinct}{$event} + ${'Y'}{$precinct}{$event};
@@ -305,7 +372,7 @@ foreach $f (@fileList)
                                 ${'Y'}{$precinct}{$event} +
                                 ${'A'}{$precinct}{$event} +
                                 ${'Blank'}{$precinct}{$event};
-         print("${'Blank'}{$precinct}{$event},");
+         print(SFD "${'Blank'}{$precinct}{$event},");
          if ($totalPrecinctVotes>0)
          {
             $percentOfVotes =  (${'Blank'}{$precinct}{$event}/$totalPrecinctVotes)*100;
@@ -322,10 +389,10 @@ foreach $f (@fileList)
          {
             $percentOfVoters = 0;
          }
-         printf("%2.0f,",$percentOfVotes);
-         printf("%2.0f,",$percentOfVoters);
+         print(SFD "%2.0f,",$percentOfVotes);
+         print(SFD "%2.0f,",$percentOfVoters);
       }
-      print("\n");
+      print(SFD "\n");
    }
 }
 
@@ -336,11 +403,16 @@ sub do_usage
    {
       $exit_val = 2;
    }
-   print<<EO_USAGE;
+   warn<<EO_USAGE;
 
 Usage:  $whoami [options] [files]
 
 Description:
+                 "h|help+" => \&do_usage,
+                 "p|polling=s" => \$pollingPlaceFile,
+                 "s|summary=s" => \$summaryFile,
+                 "e|event=s" => \$eventTarget,
+                 "m|mapBoxFile=s" => \$mapBoxFile,
 
 Options:
 
