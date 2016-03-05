@@ -12,6 +12,7 @@ library(tidyr)
 
 data_name <- "Full Voter Roll.csv"
 dat <- read_csv(data_name)
+addr_file <- "Master Address Repository-Address Points.csv"
 
 dat %<>%
   rename(RES_STREET=`RES STREET`) %>%
@@ -50,6 +51,25 @@ election <- vote %>%
   mutate(election_day=mdy(date_str),
          presidential = (year(election_day) %% 4 == 0) & (month(election_day) == 11))
 
+
+addr_dat <- read_tsv(addr_file)
+
+addr_dat %<>% select(FULLADDRESS, RES_LAT, RES_LONG, EVC_LAT, EVC_LONG, EVC_DIST) %>%
+  distinct()
+
+
+# fuzzy match addresses
+address %<>% mutate(short_addr=paste(RES_HOUSE, RES_STREET)) %>%
+  mutate(FULLADDRESS = str_replace_all(short_addr, 
+                                       c(" ST "=" STREET ", " AVE "=" AVENUE ",
+                                         " PL "=" PLACE ", " RD "=" ROAD ",
+                                         " TER "=" TERRACE ", " HWY "=" HIGHWAY ",
+                                         " DR "=" DRIVE ", " CT "=" COURT ",
+                                         " CIR "=" CIRCLE ", " LN "=" LANE ",
+                                         " BLVD "=" BOULEVARD ", " CRES "=" CRESCENT ",
+                                         " PKY "=" PARKWAY ")))
+
+address %<>% left_join(addr_dat)
 
 save(vote, election, voter, address, file="EarlyVoting.Rdata")
 
