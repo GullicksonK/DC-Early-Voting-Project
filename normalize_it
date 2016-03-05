@@ -1,0 +1,37 @@
+rm voters.db
+
+sed  -e '1s/RES STREET/RES_STREET/' -e '1s/\(......\)-\(.\)/\1_\2/g' Full* > full_fixed.csv
+
+#Or use your own favorite CSV-to-sqlite reader.
+apop_text_to_db full_fixed.csv voters voters.db
+
+#Create a person table
+sqlite3 voters.db "create table person ('pnumber', 'registered','lastname','firstname','status','party','res_house','res_apt','res_street','res_city','res_state','res_zip','res_zip4','precinct','ward','anc','smd')"
+sqlite3 voters.db "insert into person select rowid, REGISTERED,LASTNAME,FIRSTNAME,STATUS,PARTY,RES_HOUSE,RES_APT,RES_STREET,RES_CITY,RES_STATE,RES_ZIP,RES_ZIP4,PRECINCT,WARD,ANC,SMD from voters"
+
+#Create the election table, to fill via for loop below
+sqlite3 voters.db "create table election ('enumber', 'type', 'day', 'month', 'year')"
+sqlite3 voters.db "create table ell ('pnumber', 'enumber', 'ell')"
+
+#Help the shell break G_MMDDYY into parts
+first(){echo $1 | sed 's/_.*//'}
+second(){echo $1 | sed 's/._\(..\)..../\1/'}
+third(){echo $1 | sed 's/._..\(..\)../\1/'}
+fourth(){echo $1 | sed 's/._....\(..\)/\1/'}
+
+for i in S_042815 G_110414 S_071514 P_040114 S_042313 G_112012 S_052012 P_042012 S_022012 S_042011 G_112010 P_092010 G_112008 P_092008 P_022008 S_082007 S_052007 G_112006 P_092006 G_112004 P_092004 S_042004 P_012004 G_112002 P_092002 G_112000 P_092000 P_082000 S_012000 G_111999 G_111998 P_091998 P_081998 G_111997 P_091997 S_011997 G_111996 P_091996 P_081996 G_111995 P_091995 S_011995 G_111994; do
+
+t=`first $i`
+m=`second $i`
+d=`third $i`
+y=`fourth $i`
+sqlite3 voters.db "insert into election select distinct \"e_$i\" as electionid, \"$t\", $d, $m, $y from voters"
+sqlite3 voters.db "insert into ell select rowid, \"e_$i\", $i from voters"
+
+done
+
+# Index or die
+sqlite3 voters.db "create index person_id on person(pnumber)"
+sqlite3 voters.db "create index election_id on election(enumber)"
+sqlite3 voters.db "create index ell_p on ell(pnumber)"
+sqlite3 voters.db "create index ell_e on ell(enumber)"
