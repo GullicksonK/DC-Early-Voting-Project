@@ -30,14 +30,22 @@ voter_addr %<>%
 
 dist_v_early <- voter_addr %>%
   group_by(evc_dist_bin) %>%
-  summarize(prop_early=mean(ever_early), n=n())
+  summarize(prop_early=mean(ever_early), n=n()) %>%
+  mutate(evn_dist_pos = as.numeric(str_match(evc_dist_bin, ",(\\d.\\d\\d)")[,2])) %>%
+  filter(!is.na(evc_dist_bin))
 
-ggplot(filter(dist_v_early, !is.na(evc_dist_bin)), 
-       aes(evc_dist_bin, prop_early, size=n)) + 
-  geom_segment(aes(xend=evc_dist_bin, yend=0, size=0)) +
+ggplot(dist_v_early, 
+       aes(evn_dist_pos, prop_early, size=n)) + 
+  geom_segment(aes(xend=evn_dist_pos, yend=0, size=0)) +
   geom_point() +
-  xlab("Distance (Home to EV Location, miles)") +
-  scale_y_continuous("Ever Voted Early", limits=c(0,.3)) 
+  scale_x_continuous("Distance (Home to EV Location, miles)",
+                     breaks=dist_v_early$evn_dist_pos,
+                     labels=as.character(dist_v_early$evc_dist_bin)) +
+  scale_y_continuous("Ever Voted Early", limits=c(0,.3), labels = scales::percent)  +
+  scale_size_continuous("Voters") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
 
 
 
