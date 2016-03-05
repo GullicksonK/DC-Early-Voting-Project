@@ -50,6 +50,9 @@ for i in (10, 12, 14):
     elections = get_a_year(i)
     tab.append([i, 
     pct_early(elections, "x[0]==u'DEMOCRATIC'"),
-    pct_early(elections, "x[0]!=u'DEMOCRATIC'")])
+    pct_early(elections, "x[0]!=u'DEMOCRATIC'"),
+    pct_early(elections, "x[0]==u'NO PARTY'"),
+    pct_early(elections, "x[0]==u'REPUBLICAN'"),
+    ])
 
 print tab
